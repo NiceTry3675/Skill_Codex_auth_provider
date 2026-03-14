@@ -33,7 +33,7 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from codex_auth import AUTH_JSON_PATH, ensure_auth
+from Legacy.codex_auth import AUTH_JSON_PATH, ensure_auth
 
 CODEX_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_MODEL = os.environ.get("CODEX_MODEL", "gpt-5.3-codex")
