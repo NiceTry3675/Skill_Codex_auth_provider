@@ -14,7 +14,7 @@
   - `chatgpt.com/backend-api/codex/responses` 직접 호출
   - SSE 응답을 파싱합니다
 
-- [`.codex/skills/codex-oauth-provider`](./.codex/skills/codex-oauth-provider)
+- [`skills/codex-oauth-provider`](./skills/codex-oauth-provider)
   - 다른 앱이나 런타임에서 같은 패턴으로 Codex OAuth provider를 구현하실 때 사용하는 로컬 skill입니다
   - 구현 가이드, 포팅 메모, Python 템플릿을 포함합니다
 
@@ -69,7 +69,7 @@ python3 codex_custom_provider_smoke.py --force-login --auth-mode browser
 
 이 프로젝트 안의 local skill은 다음 경로에 있습니다.
 
-- [`.codex/skills/codex-oauth-provider/SKILL.md`](./.codex/skills/codex-oauth-provider/SKILL.md)
+- [`skills/codex-oauth-provider/SKILL.md`](./skills/codex-oauth-provider/SKILL.md)
 
 이 skill은 다음과 같은 요청에 맞춰 설계했습니다.
 
@@ -80,8 +80,8 @@ python3 codex_custom_provider_smoke.py --force-login --auth-mode browser
 
 ## 참고
 
-- 구현 템플릿: [`.codex/skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py`](./.codex/skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py)
-- 구현 가이드: [`.codex/skills/codex-oauth-provider/references/implementation-guide.md`](./.codex/skills/codex-oauth-provider/references/implementation-guide.md)
-- 포팅 노트: [`.codex/skills/codex-oauth-provider/references/porting-notes.md`](./.codex/skills/codex-oauth-provider/references/porting-notes.md)
+- 구현 템플릿: [`skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py`](./skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py)
+- 구현 가이드: [`skills/codex-oauth-provider/references/implementation-guide.md`](./skills/codex-oauth-provider/references/implementation-guide.md)
+- 포팅 노트: [`skills/codex-oauth-provider/references/porting-notes.md`](./skills/codex-oauth-provider/references/porting-notes.md)
 - OpenAI Codex CLI login 문서: <https://developers.openai.com/codex/cli/reference/#codex-login>
 - OpenAI Codex 인증 및 CI/CD 주의사항: <https://developers.openai.com/codex/auth/ci-cd-auth/#when-to-use-this>
