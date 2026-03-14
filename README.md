@@ -1,5 +1,7 @@
 # Codex Auth Provider
 
+English version is appended below.
+
 이 저장소는 두 가지 목적을 위해 만든 예제 리포지토리입니다.
 
 1. 다른 앱에서 사용할 수 있는 **Codex custom OAuth provider 구현 방식**을 정리합니다.
@@ -85,3 +87,95 @@ python3 codex_custom_provider_smoke.py --force-login --auth-mode browser
 - 포팅 노트: [`skills/codex-oauth-provider/references/porting-notes.md`](./skills/codex-oauth-provider/references/porting-notes.md)
 - OpenAI Codex CLI login 문서: <https://developers.openai.com/codex/cli/reference/#codex-login>
 - OpenAI Codex 인증 및 CI/CD 주의사항: <https://developers.openai.com/codex/auth/ci-cd-auth/#when-to-use-this>
+
+---
+
+## English
+
+# Codex Auth Provider
+
+This repository is an example repo built for two purposes.
+
+1. Document how to implement a **custom OAuth provider for Codex** that can be used from other apps.
+2. Publish that implementation pattern as a reusable **Codex skill**.
+
+## What is included
+
+- [`codex_custom_provider_smoke.py`](./codex_custom_provider_smoke.py)
+  - A minimal runnable example that handles ChatGPT/Codex OAuth directly
+  - Supports both `browser` PKCE login and `device` login
+  - Saves and refreshes `auth.json`
+  - Calls `chatgpt.com/backend-api/codex/responses` directly
+  - Parses SSE responses
+
+- [`skills/codex-oauth-provider`](./skills/codex-oauth-provider)
+  - A local skill for implementing the same Codex OAuth provider pattern in other apps or runtimes
+  - Includes an implementation guide, porting notes, and a Python template
+
+- [`Legacy/`](./Legacy)
+  - Stores older experimental versions
+
+## Core idea of this repository
+
+When connecting Codex as a custom provider, you can implement the following flow directly without depending on `codex login`.
+
+- Browser OAuth PKCE
+- Device-code auth
+- `auth.json`-based token cache
+- Refresh token renewal
+- Requests with the `ChatGPT-Account-Id` header
+- Codex backend calls with `store: false` and `stream: true`
+
+The current example defaults to printing the login link only, without automatically opening the browser.
+
+## Scope and support notes
+
+This repository is not about generic multi-provider token brokering like the Anthropic or Google provider examples. Instead, it focuses on directly implementing the **user-login-based authentication flow for OpenAI Codex**.
+
+The official OpenAI Codex documentation explains that `codex login` supports both browser OAuth with a ChatGPT account and device auth. Based on that, this repository shows how to embed a per-user login flow into another application.
+
+However, according to the official OpenAI guidance, `auth.json`-based Codex account authentication should only be handled within **trusted private infrastructure and within the scope of the user's own account**. The default path for automation is still the API key. `auth.json` should be treated like a password and must not be stored in a public repository or exposed environment.
+
+In other words, this example fits **personal tools, local apps, and per-user integrations in trusted internal environments**, but it is difficult to treat it as officially supported for use cases where user tokens are stored on a shared backend or used in reseller-style SaaS, multi-user services, or shared session relay layers.
+
+## Quick usage
+
+You can test it immediately with browser or device authentication.
+
+```bash
+python3 codex_custom_provider_smoke.py "Say hello in one sentence"
+```
+
+If you want to specify the auth mode explicitly:
+
+```bash
+python3 codex_custom_provider_smoke.py --auth-mode browser "Say hello"
+python3 codex_custom_provider_smoke.py --auth-mode device "Say hello"
+```
+
+If you want to ignore an existing `auth.json` and log in again:
+
+```bash
+python3 codex_custom_provider_smoke.py --force-login --auth-mode browser
+```
+
+## Using the skill
+
+The local skill in this project is available at:
+
+- [`skills/codex-oauth-provider/SKILL.md`](./skills/codex-oauth-provider/SKILL.md)
+
+This skill is designed for requests such as:
+
+- Adding a Codex OAuth provider to another CLI
+- Building browser/device auth flows in a GUI app
+- Reusing the `auth.json` storage format and refresh logic
+- Porting the Python example to another runtime
+
+## References
+
+- Implementation template: [`skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py`](./skills/codex-oauth-provider/assets/python/codex_oauth_provider_template.py)
+- Implementation guide: [`skills/codex-oauth-provider/references/implementation-guide.md`](./skills/codex-oauth-provider/references/implementation-guide.md)
+- Porting notes: [`skills/codex-oauth-provider/references/porting-notes.md`](./skills/codex-oauth-provider/references/porting-notes.md)
+- OpenAI Codex CLI login docs: <https://developers.openai.com/codex/cli/reference/#codex-login>
+- OpenAI Codex auth and CI/CD guidance: <https://developers.openai.com/codex/auth/ci-cd-auth/#when-to-use-this>
