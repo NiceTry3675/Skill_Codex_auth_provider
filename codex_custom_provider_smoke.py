@@ -44,7 +44,6 @@ import http.server
 import json
 import os
 import secrets
-import socket
 import socketserver
 import sys
 import threading
@@ -52,11 +51,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, urlparse
 
 # Public values observed in OpenCode's Codex integration.
 CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -81,7 +79,7 @@ DEFAULT_INSTRUCTIONS = os.environ.get(
     "You are a concise assistant.",
 )
 DEFAULT_ORIGINATOR = os.environ.get("CODEX_OAUTH_ORIGINATOR", "python_smoke")
-USER_AGENT = "codex-custom-provider-smoke/0.3"
+USER_AGENT = "codex-custom-provider-smoke/0.4"
 
 TOKEN_EXPIRY_SKEW_SECONDS = 60
 BROWSER_LOGIN_TIMEOUT_SECONDS = 5 * 60
@@ -281,14 +279,12 @@ def token_is_stale(bundle: TokenBundle) -> bool:
     return bundle.expires_at <= now_ts() + TOKEN_EXPIRY_SKEW_SECONDS
 
 
-def http_json_post(url: str, body: dict[str, Any], headers: Optional[dict[str, str]] = None, timeout: int = 30) -> tuple[int, dict[str, Any], str]:
+def http_json_post(url: str, body: dict[str, Any], timeout: int = 30) -> tuple[int, dict[str, Any], str]:
     req_headers = {
         "Content-Type": "application/json",
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
     }
-    if headers:
-        req_headers.update(headers)
 
     req = urllib.request.Request(
         url,
@@ -309,14 +305,12 @@ def http_json_post(url: str, body: dict[str, Any], headers: Optional[dict[str, s
         return exc.code, payload, raw
 
 
-def http_form_post(url: str, form: dict[str, str], headers: Optional[dict[str, str]] = None, timeout: int = 30) -> tuple[int, dict[str, Any], str]:
+def http_form_post(url: str, form: dict[str, str], timeout: int = 30) -> tuple[int, dict[str, Any], str]:
     req_headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Accept": "application/json",
         "User-Agent": USER_AGENT,
     }
-    if headers:
-        req_headers.update(headers)
 
     req = urllib.request.Request(
         url,
@@ -450,11 +444,37 @@ class OAuthCallbackServer:
             self._server = None
 
 
-def open_url(url: str) -> None:
-    try:
-        webbrowser.open(url)
-    except Exception:
-        pass
+def choose_auth_mode(requested_mode: Optional[str]) -> str:
+    if requested_mode:
+        return requested_mode
+    if not sys.stdin.isatty():
+        raise RuntimeError("Non-interactive run requires --auth-mode when login is needed")
+
+    while True:
+        answer = input("Select auth mode [browser/device]: ").strip().lower()
+        if answer in {"browser", "device"}:
+            return answer
+        print("Enter 'browser' or 'device'.")
+
+
+def parse_redirect_result(pasted: str, expected_state: str) -> tuple[str, str]:
+    if not pasted:
+        raise RuntimeError("No redirect URL was pasted")
+
+    parsed = urlparse(pasted)
+    qs = parse_qs(parsed.query)
+    error = qs.get("error", [None])[0]
+    error_description = qs.get("error_description", [None])[0]
+    if error:
+        raise RuntimeError(str(error_description or error))
+
+    code = qs.get("code", [None])[0]
+    returned_state = qs.get("state", [None])[0]
+    if not code:
+        raise RuntimeError("Redirect URL did not contain code=")
+    if returned_state != expected_state:
+        raise RuntimeError("Invalid state - potential CSRF attack")
+    return str(code), str(returned_state)
 
 
 def exchange_code_for_tokens(code: str, redirect_uri: str, verifier: str, debug: bool = False) -> TokenBundle:
@@ -528,28 +548,23 @@ def login_browser(manual_callback: bool, debug: bool = False) -> TokenBundle:
     else:
         print(f"Waiting for local callback on {host}:{port} ...\n")
 
-    open_url(auth_url)
-
     try:
         if manual_callback:
-            pasted = input("Paste the full redirect URL here: ").strip()
-            if not pasted:
-                raise RuntimeError("No redirect URL was pasted")
-            parsed = urlparse(pasted)
-            qs = parse_qs(parsed.query)
-            error = qs.get("error", [None])[0]
-            error_description = qs.get("error_description", [None])[0]
-            if error:
-                raise RuntimeError(str(error_description or error))
-            code = qs.get("code", [None])[0]
-            returned_state = qs.get("state", [None])[0]
-            if not code:
-                raise RuntimeError("Redirect URL did not contain code=")
-            if returned_state != state:
-                raise RuntimeError("Invalid state - potential CSRF attack")
+            code, returned_state = parse_redirect_result(
+                input("Paste the full redirect URL here: ").strip(),
+                state,
+            )
         else:
             assert server is not None
-            code, returned_state = server.wait(timeout=BROWSER_LOGIN_TIMEOUT_SECONDS)
+            try:
+                code, returned_state = server.wait(timeout=BROWSER_LOGIN_TIMEOUT_SECONDS)
+            except TimeoutError:
+                print("Timed out waiting for local callback.")
+                print("Paste the full redirect URL instead.\n")
+                code, returned_state = parse_redirect_result(
+                    input("Paste the full redirect URL here: ").strip(),
+                    state,
+                )
             if returned_state != state:
                 raise RuntimeError("Invalid state - potential CSRF attack")
 
@@ -588,7 +603,6 @@ def login_device(debug: bool = False) -> TokenBundle:
     print(DEVICE_WEB_URL)
     print()
     print(f"Enter this code: {user_code}\n")
-    open_url(DEVICE_WEB_URL)
 
     deadline = time.time() + DEVICE_LOGIN_TIMEOUT_SECONDS
     while time.time() < deadline:
@@ -626,7 +640,7 @@ def login_device(debug: bool = False) -> TokenBundle:
     raise TimeoutError("Timed out waiting for device authorization")
 
 
-def ensure_auth(auth_file: Path, auth_mode: str, force_login: bool, manual_callback: bool, debug: bool = False) -> TokenBundle:
+def ensure_auth(auth_file: Path, auth_mode: Optional[str], force_login: bool, manual_callback: bool, debug: bool = False) -> TokenBundle:
     bundle: Optional[TokenBundle] = None
 
     if not force_login and auth_file.exists():
@@ -641,12 +655,13 @@ def ensure_auth(auth_file: Path, auth_mode: str, force_login: bool, manual_callb
                 bundle = None
 
     if force_login or bundle is None:
-        if auth_mode == "browser":
+        selected_mode = choose_auth_mode(auth_mode)
+        if selected_mode == "browser":
             bundle = login_browser(manual_callback=manual_callback, debug=debug)
-        elif auth_mode == "device":
+        elif selected_mode == "device":
             bundle = login_device(debug=debug)
         else:
-            raise RuntimeError(f"Unsupported auth mode: {auth_mode}")
+            raise RuntimeError(f"Unsupported auth mode: {selected_mode}")
 
         save_auth_file(auth_file, bundle)
 
@@ -818,7 +833,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--auth-mode",
         choices=["browser", "device"],
-        default="browser",
+        default=None,
         help="Login mode to use if auth.json is missing or --force-login is set",
     )
     parser.add_argument(
@@ -873,7 +888,6 @@ def main() -> int:
                 debug=args.debug,
             )
         except RuntimeError as exc:
-            # One refresh-and-retry on 401-like failures if refresh_token exists.
             message = str(exc)
             if "HTTP 401" in message and bundle.refresh_token:
                 eprint("Got 401 from Codex backend; refreshing token and retrying once...")
